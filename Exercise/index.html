@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>US State Mean Incomes - Map</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script src="https://d3js.org/topojson.v2.min.js"></script>
+    <style>
+        body{
+            font-family: sans-serif;
+        }
+        #tooltip{
+            opacity: 0;
+            background-color: #f5f3f0;
+            position: absolute;
+            font-family: sans-serif;
+            font-size: medium;
+            width: 250px;
+            height: 40px;
+        }
+
+        #caption{
+            margin: auto;
+            padding-top: 1%;
+            padding-bottom: 1%;
+            padding-left: 4%;
+            font-family: sans-serif;
+            font-size: 20pt;
+        }
+        #container
+        {
+            width: 90vw;
+            height: 80vh;
+        }
+
+        .state_name{
+            font-family: sans-serif;
+            font-size: medium;
+            color: dimgray;
+            font-weight: bold;
+
+        }
+        .title{
+            font-size: 24pt;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="caption">
+        US Mean Houshold Income
+    </div>
+    <div id="container">
+        <svg id="svg_choropleth" width="40vw" height="80vh" viewBox="0 0 1000 800">
+        </svg>
+        <svg id="svg_cartogram" width="40vw" height="80vh" viewBox="0 0 1000 800" style="padding: 0">
+        </svg>
+    </div>
+
+    <div id="tooltip">
+        <svg id="svg_tooltop" width="100%" height="100%" viewBox="0 0 220 100">
+        </svg>
+    </div>
+    <script>
+
+        // load the data sources:
+        // source 1: US State Census Data
+        let use_census_population = "data/Census_Population.csv"
+        // source 2: US Census State geojsons
+        let geojson_cartogram = "data/cartogram_states_income.geojson";
+        let geojson_choropleth = "data/choropleth_states_income.geojson";
+
+        Promise.all(
+            [
+                d3.json(geojson_cartogram),
+                d3.json(geojson_choropleth),
+                d3.csv(use_census_population)
+            ]
+            ,d3.autoType()).then(main)
+
+
+
+    function main(data){
+
+        let geoJsonCartogram = data[0].features
+        let geoJsonChoropleth = data[1].features
+        // Def dims
+        let width = 1000
+        let height = 1000
+        let scale = 1200
+
+        function mapGenerator(geoData_features,svg_id,title,scale=1200)
+        {
+
+            // a linear white to blue color scale
+            let colorScale = d3.scaleLinear()
+                .domain(d3.extent(geoData_features, function (d) {
+                    return d["properties"]["Income"];
+                }))
+                .range(["white", "blue"])
+
+            let svg = d3.select(svg_id)
+            svg.append("text")
+                .attr("x", width/2 -200)
+                .attr("y",height* .1 )
+                .attr("class","title")
+                .text(title)
+            let projection = d3.geoAlbersUsa()
+                .scale(scale).translate([width/2, 2*height/5])
+            let geo_generator = d3.geoPath().projection(projection);
+            let mapCanvas = svg.append('g').attr("class",'mapCanvas')
+            mapCanvas.selectAll('path')
+                .data(geoData_features)
+                .enter()
+                .append('path')
+                .attr("class","path_geo")
+                .attr("d",geo_generator)
+                .attr("fill",function (d){
+                    return colorScale(d["properties"]["Income"])    // Fill the state based on the color scale
+                })
+                .attr("class",function (d){
+                    return "state_" + d["properties"]["STATE"]
+                })
+                //Mouse events
+                .on('mouseover',function (mouseData, d){
+                    d3.selectAll(".state_" + d["properties"]["STATE"])
+                        .attr("fill", "red")
+                        .attr("opacity", .75)
+                })
+                .on("mousemove",function (mouseData,d){
+                    tooltip_html(d.properties)
+                    d3.select('#tooltip')
+                        .style("opacity",.75)
+                        .style("left",(mouseData.clientX+10).toString()+"px")
+                        .style("top",(mouseData.clientY+10).toString()+"px")
+                })
+                .on("mouseout",function (mouseData,d){
+                    d3.select('#tooltip').style("opacity",0.0);
+                    d3.selectAll(".state_" + d["properties"]["STATE"])
+                        .attr("fill", (d) => {
+                            return colorScale(d["properties"]["Income"])    // Fill the state via color scale
+                        })
+                        .attr("opacity", 1)
+                })
+
+            // Zoom events
+            svg.call(d3.zoom()
+                .extent([[0,0],[1000,1000]])
+                .scaleExtent([1,12])
+                .on("zoom",zoomed)
+            )
+            function zoomed({transform}){
+                d3.selectAll(".mapCanvas").attr("transform",transform)
+            }
+        }
+
+        // Function calls to generate both maps
+        mapGenerator(geoJsonCartogram, svg_cartogram, "Cartogram", scale)
+        mapGenerator(geoJsonChoropleth, svg_choropleth, "Choropleth", scale)
+        // Populate tooltip html upon mousehover
+        function tooltip_html(data) {
+
+            d3.select("#tooltip")
+                .html(
+                    "State: " + data["NAME"] + "</br>" +
+                    "Mean Houshold Income: " + data["Mean_Income"])
+        }
+    }
+
+
+
+
+
+    </script>
+</body>
+</html>
